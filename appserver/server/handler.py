@@ -3,7 +3,10 @@ import logging
 from http.server import BaseHTTPRequestHandler
 from os import path
 from urllib.parse import urlparse, parse_qs
+from .routes.version import handle_get_version
+
 logger = logging.getLogger(__name__)
+
 
 
 # Le requestHandler est la classe qui va gérer les requetes qui arrivent sur le serveur puis va les triater et repondre au client.
@@ -11,6 +14,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     GET_ROUTES: dict = {}
     POST_ROUTES: dict = {}
+
+    
 
     # permet d'envoyer une reponse au format json au client
     def send_json(self, code: int, data):
@@ -84,3 +89,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         
         pass
+
+RequestHandler.GET_ROUTES["/"] = handle_get_version
+    
+
