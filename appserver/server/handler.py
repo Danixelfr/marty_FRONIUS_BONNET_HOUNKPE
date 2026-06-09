@@ -3,7 +3,10 @@ import logging
 from http.server import BaseHTTPRequestHandler
 from os import path
 from urllib.parse import urlparse, parse_qs
+
 from .routes.version import handle_get_version
+from .routes.hello import handle_post_hello
+from .routes.start import handle_post_start
 
 logger = logging.getLogger(__name__)
 
@@ -91,5 +94,6 @@ class RequestHandler(BaseHTTPRequestHandler):
         pass
 
 RequestHandler.GET_ROUTES["/"] = handle_get_version
-    
+RequestHandler.POST_ROUTES["/hello"] = handle_post_hello
+RequestHandler.POST_ROUTES["/start"] = handle_post_start
 
