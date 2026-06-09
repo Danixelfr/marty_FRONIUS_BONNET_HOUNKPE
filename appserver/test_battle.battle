@@ -1,0 +1,15 @@
+MVS 10
+
+[N]
+ALB+ARB=1
+ALU=-1
+XSD=1
+
+[B]
+ALB,ARB,ALU,ARU=-1
+XSD=2
+
+[R]
+ALU+ARU=2
+XSD=-2
+XNT=-1
