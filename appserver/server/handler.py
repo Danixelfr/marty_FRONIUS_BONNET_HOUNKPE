@@ -8,6 +8,8 @@ from .routes.version import handle_get_version
 from .routes.hello import handle_post_hello
 from .routes.start import handle_post_start
 from .routes.step import handle_post_step
+from .routes.score import handle_get_score
+from .routes.bye import handle_post_bye
 
 logger = logging.getLogger(__name__)
 
@@ -98,4 +100,6 @@ RequestHandler.GET_ROUTES["/"] = handle_get_version
 RequestHandler.POST_ROUTES["/hello"] = handle_post_hello
 RequestHandler.POST_ROUTES["/start"] = handle_post_start
 RequestHandler.POST_ROUTES["/step"] = handle_post_step
+RequestHandler.GET_ROUTES["/score"] = handle_get_score
+RequestHandler.POST_ROUTES["/bye"] = handle_post_bye
 
