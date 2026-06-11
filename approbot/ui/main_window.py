@@ -2,7 +2,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout,
     QWidget, QLabel, QLineEdit, QFormLayout, QTextEdit,
-    QListWidget, QListWidgetItem, QSizePolicy
+    QListWidget, QListWidgetItem, QSizePolicy, QFileDialog
 )
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -10,6 +10,8 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from network.server_client import ServerClient
 from network.robot_client import RobotClient
 from network.robot_discovery import RobotDiscovery
+from dance_parser import parse_dance_file, DanceProgram, DanceParseError
+from executeur_choregraphie import ExecuteurChoregraphie
 
 
 # ── Thread de découverte réseau ────────────────────────────────────────────────
@@ -19,7 +21,7 @@ class ThreadRecherche(QThread):
     robots_trouves = pyqtSignal(list)   # émet list[str] quand c'est fini
 
     def run(self):
-        discovery = RobotDiscovery(timeout=5.0)
+        discovery = RobotDiscovery()
         résultats = discovery.chercher()
         self.robots_trouves.emit(résultats)
 
@@ -34,6 +36,8 @@ class ApprobotInterface(QMainWindow):
         self.client_serveur: ServerClient | None = None
         self.client_robot: RobotClient = RobotClient()
         self._thread_recherche: ThreadRecherche | None = None
+        self.choregraphie: DanceProgram | None = None
+        self._executeur: ExecuteurChoregraphie | None = None
 
         self.setWindowTitle("Interface Approbot - Contrôle")
         self.setMinimumSize(1100, 650)
@@ -104,22 +108,85 @@ class ApprobotInterface(QMainWindow):
 
         colonne_gauche.setLayout(layout_colonne_gauche)
 
-        # ── COLONNE CENTRALE : Tests API serveur ───────────────────────
+        # ── COLONNE CENTRALE : Contrôles robot + Tests API ────────────
         colonne_centrale = QWidget()
         layout_central = QVBoxLayout()
-        layout_central.addWidget(self._separateur("TESTS API SERVEUR"))
+        layout_central.setSpacing(6)
 
+        # -- Déplacements --
+        layout_central.addWidget(self._separateur("DÉPLACEMENTS"))
+        self.btn_avancer      = QPushButton("⬆  Avancer (U)")
+        self.btn_reculer      = QPushButton("⬇  Reculer (B)")
+        self.btn_gauche       = QPushButton("⬅  Gauche (L)")
+        self.btn_droite       = QPushButton("➡  Droite (R)")
+        for btn in (self.btn_avancer, self.btn_reculer,
+                    self.btn_gauche, self.btn_droite):
+            btn.setEnabled(False)
+            layout_central.addWidget(btn)
+        self.btn_avancer.clicked.connect(lambda: self._cmd_robot(self.client_robot.avancer))
+        self.btn_reculer.clicked.connect(lambda: self._cmd_robot(self.client_robot.reculer))
+        self.btn_gauche.clicked.connect(lambda: self._cmd_robot(self.client_robot.aller_gauche))
+        self.btn_droite.clicked.connect(lambda: self._cmd_robot(self.client_robot.aller_droite))
+
+        # -- Bras --
+        layout_central.addWidget(self._separateur("BRAS"))
+        self.btn_alu = QPushButton("ALU — Bras G haut")
+        self.btn_aru = QPushButton("ARU — Bras D haut")
+        self.btn_alb = QPushButton("ALB — Bras G arrière")
+        self.btn_arb = QPushButton("ARB — Bras D arrière")
+        self.btn_bras_neutres = QPushButton("Bras neutres")
+        for btn in (self.btn_alu, self.btn_aru, self.btn_alb,
+                    self.btn_arb, self.btn_bras_neutres):
+            btn.setEnabled(False)
+            layout_central.addWidget(btn)
+        self.btn_alu.clicked.connect(lambda: self._cmd_robot(self.client_robot.lever_bras_gauche))
+        self.btn_aru.clicked.connect(lambda: self._cmd_robot(self.client_robot.lever_bras_droit))
+        self.btn_alb.clicked.connect(lambda: self._cmd_robot(self.client_robot.bras_gauche_arriere))
+        self.btn_arb.clicked.connect(lambda: self._cmd_robot(self.client_robot.bras_droit_arriere))
+        self.btn_bras_neutres.clicked.connect(lambda: self._cmd_robot(self.client_robot.bras_neutres))
+
+        # -- Expressions --
+        layout_central.addWidget(self._separateur("EXPRESSIONS"))
+        self.btn_xnt = QPushButton("XNT — Neutre")
+        self.btn_xsd = QPushButton("XSD — Triste 😢")
+        self.btn_xng = QPushButton("XNG — Colère 😠")
+        self.btn_xhp = QPushButton("XHP — Content 😊")
+        self.btn_xdn = QPushButton("XDN — Enjoué 🤩")
+        for btn in (self.btn_xnt, self.btn_xsd, self.btn_xng,
+                    self.btn_xhp, self.btn_xdn):
+            btn.setEnabled(False)
+            layout_central.addWidget(btn)
+        self.btn_xnt.clicked.connect(lambda: self._cmd_robot(self.client_robot.expression_neutre))
+        self.btn_xsd.clicked.connect(lambda: self._cmd_robot(self.client_robot.expression_triste))
+        self.btn_xng.clicked.connect(lambda: self._cmd_robot(self.client_robot.expression_colere))
+        self.btn_xhp.clicked.connect(lambda: self._cmd_robot(self.client_robot.expression_content))
+        self.btn_xdn.clicked.connect(lambda: self._cmd_robot(self.client_robot.expression_enjoue))
+
+        # -- Tests API serveur --
+        layout_central.addWidget(self._separateur("TESTS API SERVEUR"))
         self.button_ping  = QPushButton("GET  /  (ping)")
         self.button_start = QPushButton("POST /start")
         self.button_score = QPushButton("GET  /score")
-
         self.button_ping.clicked.connect(self.tester_ping)
         self.button_start.clicked.connect(self.tester_start)
         self.button_score.clicked.connect(self.tester_score)
-
         for btn in (self.button_ping, self.button_start, self.button_score):
             btn.setEnabled(False)
             layout_central.addWidget(btn)
+
+        # POST /step — champs + bouton
+        self.input_step_col = QLineEdit()
+        self.input_step_col.setPlaceholderText("col (ex: G)")
+        self.input_step_arm = QLineEdit()
+        self.input_step_arm.setPlaceholderText("arm (ex: ALU+ARU)")
+        self.input_step_exp = QLineEdit()
+        self.input_step_exp.setPlaceholderText("exp (ex: XNT)")
+        self.button_step = QPushButton("POST /step")
+        self.button_step.setEnabled(False)
+        self.button_step.clicked.connect(self.tester_step)
+        for w in (self.input_step_col, self.input_step_arm,
+                  self.input_step_exp, self.button_step):
+            layout_central.addWidget(w)
 
         layout_central.addStretch()
         colonne_centrale.setLayout(layout_central)
@@ -144,6 +211,20 @@ class ApprobotInterface(QMainWindow):
         layout_formulaire.addRow("Statut robot :",      self.label_statut_robot)
         layout_formulaire.addRow("Statut serveur :",    self.label_statut_serveur)
         layout_droit.addLayout(layout_formulaire)
+
+        # -- Chorégraphie chargée --
+        layout_droit.addWidget(self._separateur("CHORÉGRAPHIE"))
+        self.label_fichier_dance = QLabel("Aucun fichier chargé.")
+        self.label_fichier_dance.setWordWrap(True)
+        layout_droit.addWidget(self.label_fichier_dance)
+
+        self.zone_choregraphie = QTextEdit()
+        self.zone_choregraphie.setReadOnly(True)
+        self.zone_choregraphie.setMaximumHeight(180)
+        self.zone_choregraphie.setPlaceholderText(
+            "Les mouvements et règles apparaîtront ici après chargement."
+        )
+        layout_droit.addWidget(self.zone_choregraphie)
 
         layout_droit.addWidget(self._separateur("LOGS"))
         self.zone_logs = QTextEdit()
@@ -201,7 +282,8 @@ class ApprobotInterface(QMainWindow):
             self.log(f"Connexion serveur réussie ! RID : {rid}", "OK")
             self.btn_connecter_serveur.setEnabled(False)
             self.btn_deconnecter_serveur.setEnabled(True)
-            for btn in (self.button_ping, self.button_start, self.button_score):
+            for btn in (self.button_ping, self.button_start,
+                        self.button_score, self.button_step):
                 btn.setEnabled(True)
         except Exception as e:
             self.client_serveur = None
@@ -222,7 +304,8 @@ class ApprobotInterface(QMainWindow):
             self.label_statut_serveur.setText("Non connecté")
             self.btn_connecter_serveur.setEnabled(True)
             self.btn_deconnecter_serveur.setEnabled(False)
-            for btn in (self.button_ping, self.button_start, self.button_score):
+            for btn in (self.button_ping, self.button_start,
+                        self.button_score, self.button_step):
                 btn.setEnabled(False)
 
     # ── CONNEXION ROBOT ────────────────────────────────────────────────
@@ -240,6 +323,7 @@ class ApprobotInterface(QMainWindow):
             self.btn_connecter_robot.setEnabled(False)
             self.btn_deconnecter_robot.setEnabled(True)
             self.btn_recherche_auto.setEnabled(False)
+            self._set_boutons_robot(True)
         except Exception as e:
             self.log(f"Échec connexion robot : {e}", "ERREUR")
 
@@ -255,6 +339,25 @@ class ApprobotInterface(QMainWindow):
             self.btn_connecter_robot.setEnabled(True)
             self.btn_deconnecter_robot.setEnabled(False)
             self.btn_recherche_auto.setEnabled(True)
+            self._set_boutons_robot(False)
+
+    def _set_boutons_robot(self, actif: bool) -> None:
+        """Active ou désactive tous les boutons de contrôle robot."""
+        for btn in (self.btn_avancer, self.btn_reculer,
+                    self.btn_gauche, self.btn_droite,
+                    self.btn_alu, self.btn_aru, self.btn_alb,
+                    self.btn_arb, self.btn_bras_neutres,
+                    self.btn_xnt, self.btn_xsd, self.btn_xng,
+                    self.btn_xhp, self.btn_xdn):
+            btn.setEnabled(actif)
+
+    def _cmd_robot(self, methode) -> None:
+        """Exécute une commande robot et logue le résultat."""
+        try:
+            methode()
+            self.log(f"Commande exécutée : {methode.__name__}", "OK")
+        except Exception as e:
+            self.log(f"Erreur commande robot : {e}", "ERREUR")
 
     # ── RECHERCHE AUTOMATIQUE ──────────────────────────────────────────
 
@@ -308,6 +411,43 @@ class ApprobotInterface(QMainWindow):
             self.log(f"Chorégraphie démarrée — nombre de pas : {nb_pas}", "OK")
         except Exception as e:
             self.log(f"Échec POST /start : {e}", "ERREUR")
+            return
+
+        # Si une chorégraphie est chargée et le robot connecté, on l'exécute
+        if self.choregraphie is None:
+            self.log("Aucune chorégraphie chargée (Fichier > Charger chorégraphie).", "WARN")
+            return
+        if not self.client_robot.is_connected:
+            self.log("Robot non connecté : impossible d'exécuter la chorégraphie.", "WARN")
+            return
+        if self._executeur is not None and self._executeur.isRunning():
+            self.log("Une chorégraphie est déjà en cours d'exécution.", "WARN")
+            return
+
+        self._lancer_execution_choregraphie(nb_pas)
+
+    def _lancer_execution_choregraphie(self, nb_pas: int) -> None:
+        """Démarre l'exécution de la chorégraphie chargée dans un thread dédié."""
+        self.log(f"Lancement de la chorégraphie ({nb_pas} pas) …")
+        self._set_boutons_execution(False)
+
+        self._executeur = ExecuteurChoregraphie(
+            self.client_robot, self.client_serveur, self.choregraphie, nb_pas
+        )
+        self._executeur.log.connect(self.log)
+        self._executeur.score_maj.connect(lambda pts: self.label_score.setText(str(pts)))
+        self._executeur.termine.connect(self._on_choregraphie_terminee)
+        self._executeur.start()
+
+    def _on_choregraphie_terminee(self) -> None:
+        self._set_boutons_execution(True)
+
+    def _set_boutons_execution(self, actif: bool) -> None:
+        """Active/désactive les contrôles pendant l'exécution automatique de la chorégraphie."""
+        self._set_boutons_robot(actif)
+        for btn in (self.button_ping, self.button_start,
+                    self.button_score, self.button_step):
+            btn.setEnabled(actif)
 
     def tester_score(self):
         self.log("Envoi GET /score …")
@@ -318,10 +458,41 @@ class ApprobotInterface(QMainWindow):
         except Exception as e:
             self.log(f"Échec GET /score : {e}", "ERREUR")
 
+    def tester_step(self):
+        col = self.input_step_col.text().strip()
+        arm = self.input_step_arm.text().strip()
+        exp = self.input_step_exp.text().strip()
+        if not col or not arm or not exp:
+            self.log("Remplissez col, arm et exp avant d'envoyer /step.", "WARN")
+            return
+        self.log(f"Envoi POST /step (col={col}, arm={arm}, exp={exp}) …")
+        try:
+            points = self.client_serveur.step(col, arm, exp)
+            self.label_score.setText(str(points))
+            self.log(f"/step OK — points obtenus : {points}", "OK")
+        except Exception as e:
+            self.log(f"Échec POST /step : {e}", "ERREUR")
+
     # ── DIVERS ─────────────────────────────────────────────────────────
 
     def charger_choregraphie(self):
-        self.log("Chargement de chorégraphie — non implémenté.", "WARN")
+        chemin, _ = QFileDialog.getOpenFileName(
+            self, "Charger une chorégraphie", "", "Fichiers dance (*.dance);;Tous (*)"
+        )
+        if not chemin:
+            return
+        try:
+            self.choregraphie = parse_dance_file(chemin)
+            nom = chemin.split("/")[-1].split("\\")[-1]
+            self.label_fichier_dance.setText(f"📄 {nom}")
+            self.zone_choregraphie.setPlainText(repr(self.choregraphie))
+            self.log(f"Chorégraphie chargée : {nom} "
+                     f"({len(self.choregraphie.movements)} mouvements, "
+                     f"{len(self.choregraphie.act_rules)} règles ACT)", "OK")
+        except DanceParseError as e:
+            self.log(f"Fichier .dance invalide : {e}", "ERREUR")
+        except Exception as e:
+            self.log(f"Erreur chargement .dance : {e}", "ERREUR")
 
     def rafraichir_score(self):
         self.tester_score()
