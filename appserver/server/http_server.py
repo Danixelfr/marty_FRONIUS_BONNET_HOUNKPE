@@ -1,4 +1,5 @@
 import logging
+import threading
 from http.server import ThreadingHTTPServer
 from .handler import RequestHandler
 
@@ -9,6 +10,8 @@ class DanceBattleServer:
     def __init__(self, host: str = "0.0.0.0", port: int = 8080):
         self.host = host
         self.port = port
+        self._httpd = None
+        self._lock = threading.Lock()
 
     def start(self):
         self._httpd = ThreadingHTTPServer((self.host, self.port), RequestHandler)
@@ -21,8 +24,11 @@ class DanceBattleServer:
             self.stop()
 
     def stop(self):
-        if self._httpd:
-            self._httpd.shutdown()
-            self._httpd.server_close()
+        with self._lock:
+            httpd = self._httpd
             self._httpd = None
-            logger.info("Serveur arrêté proprement")
+        if httpd is None:
+            return
+        httpd.shutdown()
+        httpd.server_close()
+        logger.info("Serveur arrêté proprement")

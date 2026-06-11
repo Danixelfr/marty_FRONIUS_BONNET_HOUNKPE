@@ -1,6 +1,7 @@
 import logging
 from server.registry import registry
 from server.battle_config import battle_config
+from server.events import events
 
 logger = logging.getLogger(__name__)
 
@@ -45,4 +46,5 @@ def handle_post_start(handler):
             f"[START] Aucun .battle chargé → utilisation du MVS par défaut ({mvs})"
         )
 
+    events.add("start", rid=rid, mvs=mvs)
     handler.send_json(200, mvs)
