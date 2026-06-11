@@ -1,5 +1,11 @@
 import sys
+import os
 from PyQt6.QtWidgets import QApplication
+
+# dance_parser.py vit dans appserver/ (fichier partagé, pas de copie ici) :
+# on ajoute ce dossier au chemin de recherche des modules.
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "appserver"))
+
 # On importe la classe depuis le fichier main_window situé dans le dossier ui
 from ui.main_window import ApprobotInterface
 
