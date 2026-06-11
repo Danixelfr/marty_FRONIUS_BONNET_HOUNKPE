@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from server.registry import registry
+from server.events import events
 
 logger = logging.getLogger(__name__)
 
@@ -31,4 +32,5 @@ def handle_post_bye(handler):
     duration = (datetime.fromisoformat(now) - datetime.fromisoformat(robot["connected_at"])).total_seconds()
     logger.info(f"[BYE] {rid} : {robot['nb_steps_done']} pas, score={final_score}, duree={duration:.1f}s")
 
+    events.add("bye", rid=rid, final_score=final_score)
     handler.send_json(200, {"ok": True, "final_score": final_score})
