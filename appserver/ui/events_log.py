@@ -13,6 +13,7 @@ class EventsLog(QTextEdit):
         self.append(text)
 
     def poll(self):
+        # on n'affiche que les nouveaux events depuis le dernier passage
         for e in events.since(self._last_seq):
             self._last_seq = e["seq"]
             self.append(self._format(e))
