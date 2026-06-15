@@ -32,6 +32,20 @@ class ThreadRecherche(QThread):
 
 class ApprobotInterface(QMainWindow):
 
+    # Association touche clavier -> méthode de déplacement de RobotClient.
+    # Flèches directionnelles, avec ZQSD (disposition AZERTY) en alternative
+    # (cf. keyPressEvent ci-dessous).
+    TOUCHES_DEPLACEMENT: dict[int, str] = {
+        Qt.Key.Key_Up: "avancer",
+        Qt.Key.Key_Down: "reculer",
+        Qt.Key.Key_Left: "aller_gauche",
+        Qt.Key.Key_Right: "aller_droite",
+        Qt.Key.Key_Z: "avancer",
+        Qt.Key.Key_S: "reculer",
+        Qt.Key.Key_Q: "aller_gauche",
+        Qt.Key.Key_D: "aller_droite",
+    }
+
     def __init__(self):
         super().__init__()
 
@@ -136,6 +150,11 @@ class ApprobotInterface(QMainWindow):
         self.btn_reculer.clicked.connect(lambda: self._cmd_robot(self.client_robot.reculer))
         self.btn_gauche.clicked.connect(lambda: self._cmd_robot(self.client_robot.aller_gauche))
         self.btn_droite.clicked.connect(lambda: self._cmd_robot(self.client_robot.aller_droite))
+
+        label_aide_clavier = QLabel("💡 Flèches ↑↓←→ (ou Z/Q/S/D) pour déplacer le robot")
+        label_aide_clavier.setStyleSheet("color: #777; font-style: italic;")
+        label_aide_clavier.setWordWrap(True)
+        layout_central.addWidget(label_aide_clavier)
 
         # -- Bras --
         layout_central.addWidget(self._separateur("BRAS"))
@@ -258,6 +277,11 @@ class ApprobotInterface(QMainWindow):
 
         self.log("Application démarrée.")
 
+        # Permet à la fenêtre de recevoir les évènements clavier (déplacement
+        # du robot aux flèches / ZQSD) même si aucun widget enfant n'a le focus.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFocus()
+
     # ── UTILITAIRES UI ─────────────────────────────────────────────────
 
     def _separateur(self, titre: str) -> QLabel:
@@ -370,6 +394,29 @@ class ApprobotInterface(QMainWindow):
             self.log(f"Commande exécutée : {methode.__name__}", "OK")
         except Exception as e:
             self.log(f"Erreur commande robot : {e}", "ERREUR")
+
+    # ── DÉPLACEMENT AU CLAVIER ───────────────────────────────────────────
+
+    def keyPressEvent(self, event) -> None:
+        """
+        Déplace le robot avec les flèches du clavier (ou Z/Q/S/D, disposition
+        AZERTY), tant que le robot est connecté (boutons de déplacement actifs).
+
+        Les répétitions automatiques (touche maintenue enfoncée) sont ignorées
+        pour ne pas empiler des commandes bloquantes sur le robot. Les champs
+        de texte (QLineEdit) conservent leur comportement normal des flèches,
+        car ils consomment l'évènement avant qu'il n'atteigne la fenêtre
+        principale.
+        """
+        if event.isAutoRepeat():
+            return
+
+        nom_methode = self.TOUCHES_DEPLACEMENT.get(event.key())
+        if nom_methode is None or not self.btn_avancer.isEnabled():
+            super().keyPressEvent(event)
+            return
+
+        self._cmd_robot(getattr(self.client_robot, nom_methode))
 
     # ── RELEVÉ PÉRIODIQUE BATTERIE / COULEUR (D-005) ────────────────────
 
