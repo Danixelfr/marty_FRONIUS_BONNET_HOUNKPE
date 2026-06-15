@@ -2,6 +2,7 @@ import logging
 from server.registry import registry
 from server.battle_config import battle_config
 from server.battle.evaluator import compute_points
+from server.events import events
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,9 @@ def handle_post_step(handler):
     if not rules and battle_config.is_loaded:
         logger.warning(f"[STEP] Aucune regle pour couleur '{col}'")
 
-    points = compute_points(rules, arm, exp)
+    points = compute_points(rules, arm, exp)  # points gagnes/perdus sur ce mouvement
 
-    new_score = robot["score"] + points
+    new_score = robot["score"] + points  # on cumule dans le score total du robot
     new_steps = robot["nb_steps_done"] + 1
     registry.update(
         rid,
@@ -49,4 +50,5 @@ def handle_post_step(handler):
         f"(total: {new_score}, step {new_steps}/{robot['nb_steps_required']})"
     )
 
+    events.add("step", rid=rid, col=col, arm=arm, exp=exp, points=points, score=new_score)
     handler.send_json(200, points)

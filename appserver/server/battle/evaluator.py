@@ -2,6 +2,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# bras (ALU = bras gauche leve, ALB = bras gauche baisse...) et expressions du visage
 ARM_TOKENS = {"ALU", "ARU", "ALB", "ARB"}
 EXP_TOKENS = {"XNT", "XSD", "XNG", "XHP", "XDN"}
 
@@ -9,6 +10,7 @@ EXP_TOKENS = {"XNT", "XSD", "XNG", "XHP", "XDN"}
 def parse_arms(arm_field):
     if not arm_field:
         return set()
+    # en form-urlencoded le "+" devient un espace, donc on coupe sur les deux
     return {part for part in arm_field.replace("+", " ").split() if part}
 
 
@@ -22,13 +24,14 @@ def is_token_active(token, arms, exp):
 
 
 def normalize_rule(rule):
+    # le parser donne un dict {"conditions","score"}, mais on accepte aussi un tuple deja pret
     if isinstance(rule, dict):
         conditions = rule.get("conditions", "")
         points = rule.get("score", 0)
-        if "+" in conditions:
+        if "+" in conditions:  # + = ET
             tokens = [t.strip() for t in conditions.split("+") if t.strip()]
             return "AND", tokens, points
-        if "," in conditions:
+        if "," in conditions:  # , = OU
             tokens = [t.strip() for t in conditions.split(",") if t.strip()]
             return "OR", tokens, points
         return "SINGLE", [conditions.strip()], points
@@ -45,6 +48,7 @@ def evaluate_rule(rule, arms, exp):
         return 0
 
     if op == "OR":
+        # on compte les points une seule fois meme si plusieurs conditions sont vraies
         if any(is_token_active(t, arms, exp) for t in tokens):
             return points
         return 0
