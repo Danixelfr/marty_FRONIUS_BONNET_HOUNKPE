@@ -10,7 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "
 from ui.main_window import ApprobotInterface
 
 def main():
-    # --- Lancement de l'application ---
+    # Lancement de l'application
     app = QApplication(sys.argv)
 
     # On crée une instance de notre classe importée
