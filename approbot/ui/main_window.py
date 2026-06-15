@@ -12,6 +12,8 @@ from network.robot_client import RobotClient
 from network.robot_discovery import RobotDiscovery
 from dance_parser import parse_dance_file, DanceProgram, DanceParseError
 from executeur_choregraphie import ExecuteurChoregraphie
+from releve_etat import ReleveEtatRobot
+from calibration_dialog import CalibrationCouleursDialog
 
 
 # ── Thread de découverte réseau ────────────────────────────────────────────────
@@ -38,6 +40,7 @@ class ApprobotInterface(QMainWindow):
         self._thread_recherche: ThreadRecherche | None = None
         self.choregraphie: DanceProgram | None = None
         self._executeur: ExecuteurChoregraphie | None = None
+        self._releve_etat: ReleveEtatRobot | None = None
 
         self.setWindowTitle("Interface Approbot - Contrôle")
         self.setMinimumSize(1100, 650)
@@ -99,11 +102,17 @@ class ApprobotInterface(QMainWindow):
         self.liste_robots.setVisible(False)
         self.liste_robots.itemDoubleClicked.connect(self.selectionner_robot)
 
+        # Calibration des couleurs détectées par le robot (D-006)
+        self.btn_calibrer_couleurs = QPushButton("🎨  Calibrer les couleurs")
+        self.btn_calibrer_couleurs.setEnabled(False)
+        self.btn_calibrer_couleurs.clicked.connect(self.ouvrir_calibration_couleurs)
+
         layout_colonne_gauche.addWidget(self.input_ip_robot)
         layout_colonne_gauche.addWidget(self.btn_connecter_robot)
         layout_colonne_gauche.addWidget(self.btn_deconnecter_robot)
         layout_colonne_gauche.addWidget(self.btn_recherche_auto)
         layout_colonne_gauche.addWidget(self.liste_robots)
+        layout_colonne_gauche.addWidget(self.btn_calibrer_couleurs)
         layout_colonne_gauche.addStretch()
 
         colonne_gauche.setLayout(layout_colonne_gauche)
@@ -324,11 +333,13 @@ class ApprobotInterface(QMainWindow):
             self.btn_deconnecter_robot.setEnabled(True)
             self.btn_recherche_auto.setEnabled(False)
             self._set_boutons_robot(True)
+            self._demarrer_releve_etat()
         except Exception as e:
             self.log(f"Échec connexion robot : {e}", "ERREUR")
 
     def deconnecter_robot(self):
         self.log("Déconnexion du robot …")
+        self._arreter_releve_etat()
         try:
             self.client_robot.disconnect()
             self.label_statut_robot.setText("Non connecté")
@@ -348,7 +359,8 @@ class ApprobotInterface(QMainWindow):
                     self.btn_alu, self.btn_aru, self.btn_alb,
                     self.btn_arb, self.btn_bras_neutres,
                     self.btn_xnt, self.btn_xsd, self.btn_xng,
-                    self.btn_xhp, self.btn_xdn):
+                    self.btn_xhp, self.btn_xdn,
+                    self.btn_calibrer_couleurs):
             btn.setEnabled(actif)
 
     def _cmd_robot(self, methode) -> None:
@@ -358,6 +370,53 @@ class ApprobotInterface(QMainWindow):
             self.log(f"Commande exécutée : {methode.__name__}", "OK")
         except Exception as e:
             self.log(f"Erreur commande robot : {e}", "ERREUR")
+
+    # ── RELEVÉ PÉRIODIQUE BATTERIE / COULEUR (D-005) ────────────────────
+
+    def _demarrer_releve_etat(self) -> None:
+        """Démarre le thread de relevé périodique batterie/couleur."""
+        self._arreter_releve_etat()
+        self._releve_etat = ReleveEtatRobot(self.client_robot)
+        self._releve_etat.etat_maj.connect(self._on_etat_robot_maj)
+        self._releve_etat.start()
+
+    def _arreter_releve_etat(self) -> None:
+        """Arrête le thread de relevé périodique, s'il tourne, et réinitialise l'affichage."""
+        if self._releve_etat is not None:
+            self._releve_etat.arreter()
+            self._releve_etat.wait()
+            self._releve_etat = None
+        self.label_batterie.setText("- %")
+        self.label_couleur.setText("-")
+
+    def _on_etat_robot_maj(self, batterie, couleur) -> None:
+        """Callback du thread de relevé : met à jour batterie et couleur dans l'UI."""
+        if batterie is not None:
+            self.label_batterie.setText(f"{batterie:.0f} %")
+        if couleur is not None:
+            self.label_couleur.setText(couleur)
+
+    # ── CALIBRATION DES COULEURS (D-006) ────────────────────────────────
+
+    def ouvrir_calibration_couleurs(self) -> None:
+        """Ouvre le dialogue de calibration des couleurs du capteur du robot."""
+        if not self.client_robot.is_connected:
+            self.log("Robot non connecté : calibration impossible.", "WARN")
+            return
+
+        # On suspend le relevé périodique (D-005) pendant la calibration
+        # pour éviter des appels concurrents au capteur du robot.
+        if self._releve_etat is not None:
+            self._releve_etat.pause()
+
+        dialogue = CalibrationCouleursDialog(self.client_robot, self)
+        dialogue.exec()
+
+        if self._releve_etat is not None:
+            self._releve_etat.reprendre()
+
+        if dialogue.modifie:
+            self.log("Calibration des couleurs enregistrée.", "OK")
 
     # ── RECHERCHE AUTOMATIQUE ──────────────────────────────────────────
 
@@ -431,6 +490,11 @@ class ApprobotInterface(QMainWindow):
         self.log(f"Lancement de la chorégraphie ({nb_pas} pas) …")
         self._set_boutons_execution(False)
 
+        # On suspend le relevé périodique (D-005) pendant la chorégraphie
+        # pour éviter d'envoyer des commandes au robot en parallèle.
+        if self._releve_etat is not None:
+            self._releve_etat.pause()
+
         self._executeur = ExecuteurChoregraphie(
             self.client_robot, self.client_serveur, self.choregraphie, nb_pas
         )
@@ -441,6 +505,8 @@ class ApprobotInterface(QMainWindow):
 
     def _on_choregraphie_terminee(self) -> None:
         self._set_boutons_execution(True)
+        if self._releve_etat is not None:
+            self._releve_etat.reprendre()
 
     def _set_boutons_execution(self, actif: bool) -> None:
         """Active/désactive les contrôles pendant l'exécution automatique de la chorégraphie."""
@@ -496,3 +562,13 @@ class ApprobotInterface(QMainWindow):
 
     def rafraichir_score(self):
         self.tester_score()
+
+    # ── FERMETURE ──────────────────────────────────────────────────────
+
+    def closeEvent(self, event) -> None:
+        """Arrête proprement les threads en cours avant de fermer la fenêtre."""
+        self._arreter_releve_etat()
+        if self._executeur is not None and self._executeur.isRunning():
+            self._executeur.arreter()
+            self._executeur.wait()
+        super().closeEvent(event)
