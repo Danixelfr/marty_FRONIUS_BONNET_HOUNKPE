@@ -34,9 +34,9 @@ def handle_post_step(handler):
     if not rules and battle_config.is_loaded:
         logger.warning(f"[STEP] Aucune regle pour couleur '{col}'")
 
-    points = compute_points(rules, arm, exp)
+    points = compute_points(rules, arm, exp)  # points gagnes/perdus sur ce mouvement
 
-    new_score = robot["score"] + points
+    new_score = robot["score"] + points  # on cumule dans le score total du robot
     new_steps = robot["nb_steps_done"] + 1
     registry.update(
         rid,

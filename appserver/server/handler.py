@@ -11,6 +11,9 @@ from .routes.step import handle_post_step
 from .routes.score import handle_get_score
 from .routes.bye import handle_post_bye
 
+from .server_state import server_state
+from .guards import is_allowed
+
 logger = logging.getLogger(__name__)
 
 
@@ -67,6 +70,9 @@ class RequestHandler(BaseHTTPRequestHandler):
         
         path = urlparse(self.path).path
         logger.info(f"[GET]{path}")
+        if not is_allowed("GET", path):
+            self.send_json(503, {"error": "Service unavailable", "server_status": server_state.status.value})
+            return
         chemin = self.GET_ROUTES.get(path)
         #si la requete est vide ou que le chemin n'est pas trouvé dans les routes, on retourne une erreur 404
         if chemin is None:
@@ -81,6 +87,9 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         logger.info(f"[POST]{path}")
+        if not is_allowed("POST", path):
+            self.send_json(503, {"error": "Service unavailable", "server_status": server_state.status.value})
+            return
         chemin = self.POST_ROUTES.get(path)
         if chemin is None:
             self.send_json(404, {"error": f"POST{path} not found"})

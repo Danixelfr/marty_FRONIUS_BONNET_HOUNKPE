@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 def handle_get_score(handler):
+    # le rid est passe dans l'url en query string (?rid=...), pas dans le body
     qs = parse_qs(urlparse(handler.path).query)
     rid = qs.get("rid", [None])[0]
 

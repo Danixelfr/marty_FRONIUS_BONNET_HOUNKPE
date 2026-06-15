@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
 from server.registry import registry
 
 
+# tableau des robots, rafraichi periodiquement depuis le registre
 class RobotsTable(QTableWidget):
     HEADERS = ["Rang", "RID", "Score", "Pas", "Etat"]
 
@@ -14,12 +15,12 @@ class RobotsTable(QTableWidget):
 
     def refresh(self):
         robots = registry.all()
-        robots.sort(key=lambda r: r["score"], reverse=True)
+        robots.sort(key=lambda r: r["score"], reverse=True)  # classement par score
         self.setRowCount(len(robots))
         for row, robot in enumerate(robots):
             required = robot["nb_steps_required"] if robot["nb_steps_required"] is not None else "?"
             steps = f"{robot['nb_steps_done']}/{required}"
-            dot = "●" if robot["active"] else "○"
+            dot = "●" if robot["active"] else "○"  # plein = connecte, vide = parti
             state = f"{dot} {robot['state']}"
             self.setItem(row, 0, QTableWidgetItem(str(row + 1)))
             self.setItem(row, 1, QTableWidgetItem(robot["rid"]))

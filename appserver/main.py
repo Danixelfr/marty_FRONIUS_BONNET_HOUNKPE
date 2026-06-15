@@ -8,7 +8,6 @@ def main():
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--battle", default=None)
-    parser.add_argument("--headless", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
@@ -24,13 +23,8 @@ def main():
         mvs, rules = load_battle_file(args.battle)
         logging.getLogger(__name__).info(f"Battle charge : {args.battle} (MVS={mvs}, couleurs={list(rules)})")
 
-    if args.headless:
-        server = DanceBattleServer(host=args.host, port=args.port)
-        server.start()
-    else:
-        import sys
-        from ui.app import run_app
-        sys.exit(run_app(host=args.host, port=args.port))
+    server = DanceBattleServer(host=args.host, port=args.port)
+    server.start()
 
 
 if __name__ == "__main__":

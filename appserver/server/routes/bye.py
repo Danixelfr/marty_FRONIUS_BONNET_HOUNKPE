@@ -22,6 +22,7 @@ def handle_post_bye(handler):
 
     final_score = robot["score"]
     now = datetime.now().isoformat()
+    # on ne supprime pas le robot, on le marque deconnecte pour garder son score final affichable
     registry.update(
         rid,
         state="disconnected",

@@ -3,6 +3,7 @@ from collections import deque
 from datetime import datetime
 
 
+# journal des evenements (hello/start/step/bye) pour l'affichage live dans l'UI
 class EventLog:
     def __init__(self, maxlen=1000):
         self._lock = threading.Lock()
@@ -17,6 +18,7 @@ class EventLog:
             self._events.append(entry)
 
     def since(self, last_seq):
+        # l'UI donne le dernier seq qu'elle a affiche, on lui renvoie juste les nouveaux
         with self._lock:
             return [e for e in self._events if e["seq"] > last_seq]
 
